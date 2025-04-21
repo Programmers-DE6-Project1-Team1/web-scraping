@@ -1,120 +1,153 @@
-import requests
+import time
+import os
+import csv
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
-import logging
-import json
 
-# 로깅 설정
-logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+def crawl_cu_products():
+    chrome_options = Options()
+    chrome_options.add_experimental_option("detach", True)
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920x1080")
 
-MAINCATEGORY = {
-    '10': '간편식사',
-    '20': '즉석조리',
-    '30': '과자류',
-    '40': '아이스크림',
-    '50': '식품',
-    '60': '음료',
-}
+    service = Service(executable_path=os.path.join(os.getcwd(), "chromedriver.exe"))
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
-headers = {
-    'User-Agent': (
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-        'AppleWebKit/537.36 (KHTML, like Gecko) '
-        'Chrome/123.0.0.0 Safari/537.36'
-    )
-}
+    print("크롬 브라우저 실행 중...")
 
+    base_url = "https://cu.bgfretail.com/product/product.do?category=product&depth2=4&depth3={}"
+    detail_base_url = "https://cu.bgfretail.com/product/view.do?category=product&gdIdx={}"
 
-def fetch_products(cate_cd, category_name):
-    """특정 카테고리의 상품들을 크롤링"""
     products = []
 
-    for page in range(1, 15):
-        url = "https://cu.bgfretail.com/product/productAjax.do"
+    for depth in range(1, 8):
+        print(f"\n접속 중: depth3={depth}")
+        driver.get(base_url.format(depth))
 
-        data = {
-            "pageIndex": str(page),
-            "listType": "prod",
-            "cateCd": cate_cd,
-            "category": "1",
-            "depth1": "1",
-            "depth2": "4",
-            "pageSize": "20"
-        }
+        try:
+            while True:
+                more_btn = WebDriverWait(driver, 2).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "div.prodListBtn-w > a"))
+                )
+                print("더보기 클릭")
+                driver.execute_script("arguments[0].click();", more_btn)
+                time.sleep(1.2)
+        except:
+            print("더보기 버튼 없음")
 
-        res = requests.post(url, data=data, headers=headers)
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        product_items = soup.select("li.prod_list")
+        print(f"상품 수: {len(product_items)}")
 
-        if res.status_code != 200:
-            logging.warning(f"[{category_name}] 페이지 {page}: 요청 실패 (status {res.status_code})")
-            break
+        visited_ids = set()
 
-        soup = BeautifulSoup(res.text, "html.parser")
-        product_tags = soup.select("li.prod_list")
+        for idx, item in enumerate(product_items):
+            print(f"\n상품 {idx + 1} 처리 시작")
 
-        if not product_tags:
-            logging.info(f"[{category_name}] 페이지 {page}: 상품 없음 (종료)")
-            break
-
-        for tag in product_tags:
-            name_tag = tag.select_one(".name p")
-            price_tag = tag.select_one(".price strong")
-            img_tag = tag.select_one(".prod_img img")
-
-            if not (name_tag and price_tag and img_tag):
+            onclick = item.select_one(".prod_img")
+            if not onclick or "view(" not in onclick.get("onclick", ""):
                 continue
 
-            # 🏷️ 뱃지 분류 (중복 허용)
-            badge_imgs = tag.select("img")
-            is_new = False
-            is_best = False
-            event_types = []
+            try:
+                gdIdx = onclick["onclick"].split("view(")[1].split(")")[0].strip()
+            except:
+                continue
 
-            for b in badge_imgs:
-                src = b.get("src", "").lower()
-                if "new" in src:
-                    is_new = True
-                elif "best" in src:
-                    is_best = True
-                if "1plus1" in src or "1+1" in src:
-                    event_types.append("1+1")
-                elif "2plus1" in src or "2+1" in src:
-                    event_types.append("2+1")
+            if gdIdx in visited_ids:
+                print(f"{gdIdx} 이미 처리됨 → 스킵")
+                continue
+            visited_ids.add(gdIdx)
 
-            products.append({
-                "category": category_name,
-                "name": name_tag.get_text(strip=True),
-                "price": price_tag.get_text(strip=True),
-                "image_url": urljoin("https://cu.bgfretail.com", img_tag["src"]),
-                "is_new": is_new,
-                "is_best": is_best,
-                "event_types": event_types
-            })
+            detail_url = detail_base_url.format(gdIdx)
+            driver.get(detail_url)
 
-    return products
+            try:
+                WebDriverWait(driver, 3).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "div.prodDetail"))
+                )
 
+                detail_soup = BeautifulSoup(driver.page_source, "html.parser")
+                product_name = detail_soup.select_one("div.prodDetail p.tit")
 
-def main():
-    all_products = []
+                promotion_tag_ul = detail_soup.select_one("ul.prodTag")
+                promotion_tag_items = []
+                if promotion_tag_ul and promotion_tag_ul.get("id") != "taglist":
+                    promotion_tag_items = promotion_tag_ul.select("li")
 
-    for cate_cd, category_name in MAINCATEGORY.items():
-        logging.info(f"📂 [{category_name}] 크롤링 시작")
-        category_products = fetch_products(cate_cd, category_name)
-        all_products.extend(category_products)
+                price = detail_soup.select_one("dd.prodPrice > p > span")
+                product_description = detail_soup.select_one("ul.prodExplain > li")
+                tag_list = detail_soup.select("ul#taglist > li")
+                image = detail_soup.select_one("div.prodDetail img")
+                label = detail_soup.select_one("span.tag img")
 
-    logging.info(f"\n✅ 크롤링 완료! 총 {len(all_products)}개 상품 수집됨\n")
-    return all_products
+                promotion_tags = []
+                category_tags = []
 
+                PROMOTION_KEYWORDS = ['1+1', '2+1']
+                for tag in promotion_tag_items:
+                    text = tag.text.strip()
+                    img = tag.find("img")
+                    if img and img.get("alt"):
+                        text = img.get("alt").strip()
+                    for t in text.split(','):
+                        t = t.strip().replace('\u3000', '').replace('\xa0', '')
+                        if not t:
+                            continue
+                        if any(keyword in t for keyword in PROMOTION_KEYWORDS):
+                            if t not in promotion_tags:
+                                promotion_tags.append(t)
+
+                for t in tag_list:
+                    cleaned = t.text.strip()
+                    if cleaned:
+                        category_tags.append(cleaned)
+
+                name_text = product_name.text.strip() if product_name else None
+                promotion_text = ", ".join(promotion_tags) if promotion_tags else None
+                price_text = None
+                if price and price.text:
+                    price_clean = price.text.replace(",", "").strip()
+                    price_text = int(price_clean) if price_clean.isdigit() else None
+                description_text = product_description.text.strip() if product_description else None
+                tag_text = ", ".join(category_tags) if category_tags else None
+
+                image_url = None
+                if image:
+                    raw_src = image.get("src")
+                    if raw_src:
+                        image_url = raw_src if raw_src.startswith("http") else "https:" + raw_src
+
+                label_text = label["alt"].strip() if label and label.get("alt") else None
+
+                if not name_text:
+                    continue
+
+                products.append([
+                    name_text, promotion_text, price_text, description_text,
+                    tag_text, image_url, label_text
+                ])
+                print("저장 완료:", name_text)
+
+            except Exception as e:
+                print("상세페이지 로딩 실패:", e)
+
+    driver.quit()
+
+    # CSV 저장
+    with open("cu_products_standalone.csv", "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.writer(f)
+        writer.writerow(['product_name', 'promotion_tag', 'price', 'product_description', 'tag', 'image_url', 'label'])
+        writer.writerows(products)
+
+    print(f"\nCSV 저장 완료: {len(products)}개")
 
 if __name__ == "__main__":
-    products = main()
-
-    # 👀 신제품만 예시 출력
-    for p in products:
-        if p["is_new"]:
-            print(p)
-
-    # 💾 JSON 저장
-    with open("cu_products.json", "w", encoding="utf-8") as f:
-        json.dump(products, f, ensure_ascii=False, indent=2)
-
-    print("✔ cu_products.json 파일로 저장 완료!")
+    crawl_cu_products()
