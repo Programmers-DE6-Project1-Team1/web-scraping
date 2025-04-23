@@ -128,8 +128,10 @@ def crawl_cu_products(test_mode=False):
                 if image:
                     raw_src = image.get("src")
                     if raw_src:
-                        # 이미지 URL 형식 검사 및 수정
-                        if raw_src.startswith("http") and not raw_src.startswith("https:http"):
+                        # 중복 접두사 방지: 예를 들어 "https:http://..." 같은 경우
+                        if raw_src.count("http") > 1:
+                            print(f"잘못된 이미지 URL 감지됨: {raw_src}")
+                        elif raw_src.startswith("http://") or raw_src.startswith("https://"):
                             image_url = raw_src
                         elif raw_src.startswith("//"):
                             image_url = "https:" + raw_src
