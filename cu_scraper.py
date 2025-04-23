@@ -128,7 +128,11 @@ def crawl_cu_products(test_mode=False):
                 if image:
                     raw_src = image.get("src")
                     if raw_src:
-                        image_url = raw_src if raw_src.startswith("http") else "https:" + raw_src
+                        # 이미지 URL 형식 검사 및 수정
+                        if raw_src.startswith("http") and not raw_src.startswith("https:http"):
+                            image_url = raw_src
+                        elif raw_src.startswith("//"):
+                            image_url = "https:" + raw_src
 
                 label_text = label["alt"].strip() if label and label.get("alt") else None
 
@@ -148,14 +152,12 @@ def crawl_cu_products(test_mode=False):
     driver.quit()
     return products
 
-
 def save_to_csv(products, filename="cu_products_standalone.csv"):
     with open(filename, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
         writer.writerow(['gdIdx', 'product_name', 'promotion_tag', 'price', 'product_description', 'tag', 'image_url', 'label'])
         writer.writerows(products)
     print(f"\nCSV 저장 완료: {len(products)}개")
-
 
 if __name__ == "__main__":
     data = crawl_cu_products(test_mode=False)  # 테스트할 땐 True로 바꾸면 빨라짐
