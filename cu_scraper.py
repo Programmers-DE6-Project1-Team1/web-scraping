@@ -9,7 +9,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 
-def crawl_cu_products():
+def crawl_cu_products(test_mode=False):
     chrome_options = Options()
     chrome_options.add_experimental_option("detach", True)
     chrome_options.add_argument("--no-sandbox")
@@ -28,7 +28,9 @@ def crawl_cu_products():
 
     products = []
 
-    for depth in range(1, 8):
+    depth_range = range(1, 8)
+    
+    for depth in depth_range:
         print(f"\n접속 중: depth3={depth}")
         driver.get(base_url.format(depth))
 
@@ -50,6 +52,9 @@ def crawl_cu_products():
         visited_ids = set()
 
         for idx, item in enumerate(product_items):
+            if test_mode and idx >= 10:  # 테스트 모드일 경우 최대 10개만
+                break
+
             print(f"\n상품 {idx + 1} 처리 시작")
 
             onclick = item.select_one(".prod_img")
@@ -131,6 +136,7 @@ def crawl_cu_products():
                     continue
 
                 products.append([
+                    gdIdx,
                     name_text, promotion_text, price_text, description_text,
                     tag_text, image_url, label_text
                 ])
@@ -140,14 +146,17 @@ def crawl_cu_products():
                 print("상세페이지 로딩 실패:", e)
 
     driver.quit()
+    return products
 
-    # CSV 저장
-    with open("cu_products_standalone.csv", "w", newline="", encoding="utf-8-sig") as f:
+
+def save_to_csv(products, filename="cu_products_standalone.csv"):
+    with open(filename, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
-        writer.writerow(['product_name', 'promotion_tag', 'price', 'product_description', 'tag', 'image_url', 'label'])
+        writer.writerow(['gdIdx', 'product_name', 'promotion_tag', 'price', 'product_description', 'tag', 'image_url', 'label'])
         writer.writerows(products)
-
     print(f"\nCSV 저장 완료: {len(products)}개")
 
+
 if __name__ == "__main__":
-    crawl_cu_products()
+    data = crawl_cu_products(test_mode=False)  # 테스트할 땐 True로 바꾸면 빨라짐
+    save_to_csv(data)
