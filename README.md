@@ -36,7 +36,7 @@ product_name,promotion_tag,price,product_description,tag,image_url,label
 ### 1. 필요한 패키지 설치
 
 ```bash
-pip install selenium beautifulsoup4
+pip install -r requirements.txt
 ```
 
 > 💡 `chromedriver`는 현재 디렉토리에 `chromedriver.exe`로 위치해야 합니다.  
