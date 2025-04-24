@@ -6,7 +6,6 @@ CU 상품 크롤러 (macOS · Windows · Linux 공통)
 """
 
 import time
-import os
 import csv
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -15,17 +14,18 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
-from webdriver_manager.chrome import ChromeDriverManager   # NEW
+from webdriver_manager.chrome import ChromeDriverManager  # NEW
+
 
 def get_chrome_driver() -> webdriver.Chrome:
     """운영체제에 맞는 ChromeDriver를 자동 설치·재사용한다."""
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new")          # 새 헤드리스 모드
+    chrome_options.add_argument("--headless=new")  # 새 헤드리스 모드
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_experimental_option("detach", True) # 디버그용(선택)
+    chrome_options.add_experimental_option("detach", True)  # 디버그용(선택)
 
     # Apple Silicon에서 드라이버가 x86으로 내려오는 경우:
     # os.environ["WDM_ARCH"] = "arm64"
