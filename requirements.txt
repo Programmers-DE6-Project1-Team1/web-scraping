@@ -1,2 +1,4 @@
-selenium
-beautifulsoup4
+selenium~=4.31.0
+beautifulsoup4~=4.13.4
+pytest
+webdriver-manager~=4.0.2
