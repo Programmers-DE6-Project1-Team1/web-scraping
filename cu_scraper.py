@@ -34,7 +34,7 @@ def get_chrome_driver() -> webdriver.Chrome:
     return webdriver.Chrome(service=service, options=chrome_options)
 
 
-def crawl_cu_products() -> None:
+def crawl_cu_products(test_mode=False):
     driver = get_chrome_driver()
     print("크롬 브라우저 실행 중...")
 
@@ -48,7 +48,9 @@ def crawl_cu_products() -> None:
 
     products = []
 
-    for depth in range(1, 8):
+    depth_range = range(1, 8)
+    
+    for depth in depth_range:
         print(f"\n접속 중: depth3={depth}")
         driver.get(base_url.format(depth))
 
@@ -73,6 +75,9 @@ def crawl_cu_products() -> None:
         visited_ids: set[str] = set()
 
         for idx, item in enumerate(product_items):
+            if test_mode and idx >= 10:  # 테스트 모드일 경우 최대 10개만
+                break
+
             print(f"\n상품 {idx + 1} 처리 시작")
 
             onclick_elem = item.select_one(".prod_img")
@@ -152,9 +157,18 @@ def crawl_cu_products() -> None:
                 if image:
                     raw_src = image.get("src")
                     if raw_src:
-                        image_url = raw_src if raw_src.startswith("http") else "https:" + raw_src
+                        # 중복 접두사 방지: 예를 들어 "https:http://..." 같은 경우
+                        if raw_src.count("http") > 1:
+                            print(f"잘못된 이미지 URL 감지됨: {raw_src}")
+                        elif raw_src.startswith("http://") or raw_src.startswith("https://"):
+                            image_url = raw_src
+                        elif raw_src.startswith("//"):
+                            image_url = "https:" + raw_src
 
                 label_text = label["alt"].strip() if label and label.get("alt") else None
+
+                if not name_text:
+                    continue
 
                 products.append(
                     [
@@ -173,9 +187,10 @@ def crawl_cu_products() -> None:
                 print("상세페이지 로딩 실패:", e)
 
     driver.quit()
+    return products
 
-    # CSV 저장
-    with open("cu_products_standalone.csv", "w", newline="", encoding="utf-8-sig") as f:
+def save_to_csv(products, filename="cu_products_standalone.csv"):
+    with open(filename, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
         writer.writerow(
             [
@@ -188,10 +203,11 @@ def crawl_cu_products() -> None:
                 "label",
             ]
         )
-        writer.writerows(products)
 
+        writer.writerows(products)
     print(f"\nCSV 저장 완료: {len(products)}개")
 
 
 if __name__ == "__main__":
-    crawl_cu_products()
+    data = crawl_cu_products(test_mode=False)  # 테스트할 땐 True로 바꾸면 빨라짐
+    save_to_csv(data)
